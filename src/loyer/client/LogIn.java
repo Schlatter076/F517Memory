@@ -6,6 +6,7 @@ import java.util.List;
 import loyer.db.ProductTypeTools;
 import loyer.db.ProductTypeTools.ProductType;
 import loyer.gui.LogInFrame;
+import loyer.properties.Tables;
 
 public class LogIn extends LogInFrame {
 
@@ -16,7 +17,7 @@ public class LogIn extends LogInFrame {
   }//*/
   
   public LogIn() {
-    textField.setText("F517记忆开关");  //设置默认机种
+    textField.setText(list.get(0).getName());  //设置默认机种
   }
   @Override
   public void logInEvent() {
@@ -24,15 +25,15 @@ public class LogIn extends LogInFrame {
       if(textField.getText().equals(list.get(0).getName())) {
         isDataView = true;
         frame.dispose();
-        F517DataView.getDataView();
+        DataView.getDataView(Tables.F517, list.get(0).getName());
       } else if(textField.getText().equals(list.get(1).getName())) {
         isDataView = true;
         frame.dispose();
-        NL3BDataView.getDataView();
-      } else {
+        DataView.getDataView(Tables.NL3B, list.get(1).getName());
+      } else if(textField.getText().equals(list.get(2).getName())){
         isDataView = true;
         frame.dispose();
-        C211DataView.getDataView();
+        DataView.getDataView(Tables.C211, list.get(2).getName());
       }
     }
   }
@@ -52,17 +53,5 @@ public class LogIn extends LogInFrame {
       }
     });
   }//*/
-  /*
-  public static void main(String[] args) {
-
-    EventQueue.invokeLater(new Runnable() {
-      
-      @Override
-      public void run() {
-        LogIn win = new LogIn();
-        win.frame.setVisible(true);
-      }
-    });
-  }//*/
-
+  
 }

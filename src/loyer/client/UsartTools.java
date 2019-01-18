@@ -8,10 +8,11 @@ import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.util.List;
-import java.util.Vector;
+import java.time.LocalDate;
+import java.util.ArrayList;
 
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -19,13 +20,11 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
-import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.JToggleButton;
-import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -33,70 +32,82 @@ import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.border.EtchedBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.JTableHeader;
-import javax.swing.table.TableColumn;
 
+import gnu.io.SerialPort;
+import gnu.io.SerialPortEvent;
 import loyer.db.PositionTools;
 import loyer.db.PositionTools.PositionData;
+import loyer.exception.NoSuchPort;
+import loyer.exception.NotASerialPort;
+import loyer.exception.PortInUse;
+import loyer.exception.SerialPortParamFail;
+import loyer.exception.TooManyListeners;
+import loyer.serial.SerialPortTools;
 
 public class UsartTools {
 
   private JFrame frame;
   private JTabbedPane tabbedPane;
-  private JScrollPane leftPane;
+  private JPanel leftPane;
   private JPanel rightPane;
-  private JScrollPane rightScrollPane;
   private final int WIDTH = Toolkit.getDefaultToolkit().getScreenSize().width;
   private final int HEIGHT = Toolkit.getDefaultToolkit().getScreenSize().height;  
   private JMenuBar menuBar;
   private JMenu helpMenu;
   private JMenuItem tipItem;
   private JMenuItem aboutItem;
-  private JProgressBar progressBar;
   
-  private JTextField[] XpositionField = new JTextField[4];
-  private JTextField[] ZpositionField = new JTextField[4];
-  private JTextField[] XtempField = new JTextField[4];
-  private JTextField[] ZtempField = new JTextField[4];
-  private JButton[] XposButt = new JButton[4];
-  private JButton[] XtempButt = new JButton[4];
-  private JButton[] ZposButt = new JButton[4];
-  private JButton[] ZtempButt = new JButton[4];
-  private JToggleButton[] forward = new JToggleButton[16];
-  private JToggleButton[] backward = new JToggleButton[16];
-  private MyPanel[] XpositionPanel = new MyPanel[4];
-  private MyPanel[] XtempPanel = new MyPanel[4];
-  private MyPanel[] ZpositionPanel = new MyPanel[4];
-  private MyPanel[] ZtempPanel = new MyPanel[4];
-  private JPanel[] panel = new JPanel[4];
+  /**参数面板*/
+  private JPanel[] panels = new JPanel[4];
+  /**电机参数值*/
+  private JTextField[][] fields = new JTextField[4][5];
+  private JButton[][] butts = new JButton[4][4];
+  /**电机参数名*/
+  private JTextField[][] args = new JTextField[4][5];
+  private JButton[] modButts = new JButton[6];
+  /**机种名*/
+  private String productType;
+  /**接收缓冲区*/
+  private JTextArea rxArea;
+  /**发送缓冲区*/
+  private JTextArea txArea;
+  private JRadioButton rxStrButt;
+  private JRadioButton rxHexButt;
+  private JButton clearRxButt;
+  private JButton saveRxButt;
+  private JRadioButton txStrButt;
+  private JRadioButton txHexButt;
+  private JButton clearTxButt;
+  private JButton saveTxButt;
+  private JButton transFileButt;
+  private JButton transDataButt;
+  private JButton autoTransButt;
+  private JTextField cycleField;
+  private JComboBox<String> portListBox;
+  private JComboBox<String> baudBox;
+  private JComboBox<String> parityBox;
+  private JComboBox<String> stopBitBox;
+  private JComboBox<String> dataBitBox;
+  private JButton openPort;
+  /**串口对象*/
+  private SerialPort COM1;
+  private ArrayList<String> portList = SerialPortTools.findPort();
+  /** 换行符 */
+  private static final String SEPARATOR = System.getProperty("line.separator");
   private Timer timer1;
-  private int progressValue = 0;
+  private JTextField rxCountField;
+  private JTextField txCountField;
+  private JButton clearCountButt;
+
   
-  /**
-   * Launch the application.
-   */
-  public static void main(String[] args) {
-    EventQueue.invokeLater(new Runnable() {
-      public void run() {
-        try {
-          UsartTools window = new UsartTools();
-          window.frame.setVisible(true);
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
-  }
   /**
    * 获取调试助手
    */
-  public static void getUsartTools() {
+  public static void getUsartTools(String productType) {
     EventQueue.invokeLater(new Runnable() {
       public void run() {
         try {
-          UsartTools window = new UsartTools();
+          UsartTools window = new UsartTools(productType);
           window.frame.setVisible(true);
         } catch (Exception e) {
           e.printStackTrace();
@@ -104,13 +115,11 @@ public class UsartTools {
       }
     });
   }
-  /**
-   * Create the application.
-   */
-  public UsartTools() {
+
+  public UsartTools(String productType) {
+    this.productType = productType;
     initialize();
   }
-
   /**
    * Initialize the contents of the frame.
    */
@@ -136,19 +145,6 @@ public class UsartTools {
       }
     });
     
-    progressBar = new JProgressBar(JProgressBar.HORIZONTAL); //水平进度条
-    //progressBar.setIndeterminate(true);  //不确定进度条
-    //progressBar.setBorderPainted(false);  //除去边框
-    //progressBar.setForeground(new Color(255, 0, 0));
-    timer1 = new Timer(20, e -> {
-      if(progressBar.getValue() >= 100) {
-        progressValue = 0;
-      }
-      progressBar.setValue(progressValue);
-      progressValue++;
-    });
-    timer1.start();    
-    
     menuBar = new JMenuBar();
     helpMenu = new JMenu("帮助(H)");
     tipItem = new JMenuItem("提示与技巧(T)...");
@@ -161,196 +157,481 @@ public class UsartTools {
     tipItem.addActionListener(e -> tips());
     aboutItem.addActionListener(e -> about());
     
-    JPanel fieldPanel = new JPanel(new GridLayout(2, 2));
-    for(int i = 0; i < 4; i++) {
-      
-      PositionData data = PositionTools.getByName("F517记忆开关", i + 1);
-      XpositionField[i] = new JTextField(10);
-      XpositionField[i].setText(data.getXposition() + "");
-      XpositionField[i].setHorizontalAlignment(SwingConstants.CENTER);
-      XpositionField[i].setBackground(Color.ORANGE);
-      XpositionField[i].setForeground(Color.RED);
-      XpositionField[i].setFont(new Font("宋体", Font.PLAIN, 18));
-      XtempField[i] = new JTextField(10);
-      XtempField[i].setText(data.getXtemp() + "");
-      XtempField[i].setHorizontalAlignment(SwingConstants.CENTER);
-      XtempField[i].setBackground(Color.ORANGE);
-      XtempField[i].setForeground(Color.RED);
-      XtempField[i].setFont(new Font("宋体", Font.PLAIN, 18));
-      ZpositionField[i] = new JTextField(10);
-      ZpositionField[i].setText(data.getZposition() + "");
-      ZpositionField[i].setHorizontalAlignment(SwingConstants.CENTER);
-      ZpositionField[i].setBackground(Color.ORANGE);
-      ZpositionField[i].setForeground(Color.RED);
-      ZpositionField[i].setFont(new Font("宋体", Font.PLAIN, 18));
-      ZtempField[i] = new JTextField(10);
-      ZtempField[i].setText(data.getZtemp() + "");
-      ZtempField[i].setHorizontalAlignment(SwingConstants.CENTER);
-      ZtempField[i].setBackground(Color.ORANGE);
-      ZtempField[i].setForeground(Color.RED);
-      ZtempField[i].setFont(new Font("宋体", Font.PLAIN, 18));
-      XposButt[i] = new JButton("修改数据");
-      XtempButt[i] = new JButton("修改数据");
-      ZposButt[i] = new JButton("修改数据");
-      ZtempButt[i] = new JButton("修改数据");
-      XpositionPanel[i] = new MyPanel("X设定位置", XpositionField[i], XposButt[i]);
-      XtempPanel[i] = new MyPanel("X当前位置", XtempField[i], XtempButt[i]);
-      ZpositionPanel[i] = new MyPanel("Z设定位置", ZpositionField[i], ZposButt[i]);
-      ZtempPanel[i] = new MyPanel("Z当前位置", ZtempField[i], ZtempButt[i]);
-      panel[i] = new JPanel(new GridLayout(4, 1));
-      panel[i].setBorder(new TitledBorder(new LineBorder(Color.GRAY, 2), (i + 1) + "号按钮", TitledBorder.LEFT, 
-          TitledBorder.TOP, new Font("等线", Font.PLAIN, 13), Color.BLACK));
-      panel[i].add(XpositionPanel[i]);
-      panel[i].add(XtempPanel[i]);
-      panel[i].add(ZpositionPanel[i]);
-      panel[i].add(ZtempPanel[i]);
-      fieldPanel.add(panel[i]);
-    }
+    
     tabbedPane = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
-    leftPane = new JScrollPane();
-    leftPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+    leftPane = new JPanel(new BorderLayout(5, 10));
     leftPane.setBorder(new TitledBorder(new EtchedBorder(), "串口调试助手", TitledBorder.CENTER, 
         TitledBorder.TOP, new Font("等线", Font.PLAIN, 13), Color.BLACK));
-    rightPane = new JPanel(new BorderLayout(5, 10));
-    rightScrollPane = new JScrollPane();
-    rightScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
-    rightScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-    rightScrollPane.setBorder(new TitledBorder(new LineBorder(Color.GRAY, 2), "参数列表", TitledBorder.LEFT, 
-        TitledBorder.TOP, new Font("等线", Font.PLAIN, 13), Color.BLACK));
-    rightPane.setBorder(new TitledBorder(new EtchedBorder(), "电机参数设置", TitledBorder.CENTER, 
-        TitledBorder.TOP, new Font("等线", Font.PLAIN, 13), Color.BLACK));
-    tabbedPane.addTab("串口工具", leftPane);
-    tabbedPane.addTab("位置参数", rightPane);
     
-    /*
-    JPanel buttPanel = new JPanel(new GridLayout(1, 4));
-    JButton butt1 = new JButton("1");
-    JButton butt2 = new JButton("2");
-    JButton butt3 = new JButton("3");
-    JButton butt4 = new JButton("4");
-    buttPanel.add(butt1);
-    buttPanel.add(butt2);
-    buttPanel.add(butt3);
-    buttPanel.add(butt4);
-    JPanel p = new JPanel(new GridLayout(2, 1));
-    p.add(fieldPanel);
-    p.add(new JLabel(new ImageIcon(JLabel.class.getResource("/pic/frame.jpg"))));
-    //*/
-    rightPane.add(rightScrollPane, BorderLayout.CENTER);
-    rightPane.add(fieldPanel, BorderLayout.WEST);
-    rightPane.add(progressBar, BorderLayout.SOUTH);
-    rightScrollPane.setViewportView(completedTable(getTestTable()));
+    rxArea = new JTextArea();
+    rxArea.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+    JScrollPane rxPane = new JScrollPane(rxArea);
+    rxPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+    rxStrButt = new JRadioButton("文本模式");
+    rxStrButt.addActionListener(e -> {
+      if(rxStrButt.isSelected()) {
+        rxHexButt.setSelected(false);
+      } else if(!rxHexButt.isSelected()) {
+        rxStrButt.setSelected(true);
+      }
+    });
+    rxHexButt = new JRadioButton("HEX模式", true);
+    rxHexButt.addActionListener(e -> {
+      if(rxHexButt.isSelected()) {
+        rxStrButt.setSelected(false);
+      } else if(!rxStrButt.isSelected()) {
+        rxHexButt.setSelected(true);
+      }
+    });
+    clearRxButt = new JButton("清空接收区");
+    clearRxButt.addActionListener(e -> {
+      rxArea.setText("");
+    });
+    saveRxButt = new JButton("保存接收数据");
+    JPanel rxButtPanel = new JPanel(new GridLayout(4, 1, 5, 5));
+    rxButtPanel.add(rxStrButt);
+    rxButtPanel.add(rxHexButt);
+    rxButtPanel.add(clearRxButt);
+    rxButtPanel.add(saveRxButt);
+    JPanel rxPanel = new JPanel(new BorderLayout(5, 5));
+    rxPanel.setBorder(new TitledBorder(new EtchedBorder(), "接收缓冲区", TitledBorder.LEFT, TitledBorder.TOP));
+    rxPanel.add(rxPane, BorderLayout.CENTER);
+    rxPanel.add(rxButtPanel, BorderLayout.WEST);
     
-    //frame.getContentPane().add(progressBar, BorderLayout.NORTH);
-    frame.getContentPane().add(tabbedPane, BorderLayout.CENTER);
-  }
-  
-  /**
-   * 创建JTable方法
-   * 
-   * @return
-   */
-  public JTable getTestTable() {
-    Vector<Object> rowNum = null, colNum = null;
-    // 创建列对象
-    colNum = new Vector<>();
-    colNum.add("");
-    colNum.add("按钮");
-    colNum.add("机种名");
-    colNum.add("X设定位置");
-    colNum.add("X当前位置");
-    colNum.add("Z设定位置");
-    colNum.add("Z当前位置");
-    colNum.add("日期");
-    colNum.add("说明");
-
-    // 创建行对象
-    rowNum = new Vector<>();
-    List<PositionData> tableList = PositionTools.getByName("F517记忆开关"); 
-    for (PositionData rd : tableList) {
-      Vector<String> vt = new Vector<>();
-      vt.add("");
-      vt.add(rd.getNumber()+ "");
-      vt.add(rd.getName());
-      vt.add(rd.getXposition() + "");
-      vt.add(rd.getXtemp() + "");
-      vt.add(rd.getZposition() + "");
-      vt.add(rd.getZtemp() + "");
-      vt.add(rd.getDate());
-      vt.add(rd.getTips());
-
-      rowNum.add(vt);
+    txArea = new JTextArea();
+    txArea.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+    JScrollPane txPane = new JScrollPane(txArea);
+    txPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+    txStrButt = new JRadioButton("文本模式");
+    txStrButt.addActionListener(e -> {
+      if(txStrButt.isSelected()) {
+        txHexButt.setSelected(false);
+      } else if(!txHexButt.isSelected()) {
+        txStrButt.setSelected(true);
+      }
+    });
+    txHexButt = new JRadioButton("HEX模式", true);
+    txHexButt.addActionListener(e -> {
+      if(txHexButt.isSelected()) {
+        txStrButt.setSelected(false);
+      } else if(!txStrButt.isSelected()) {
+        txHexButt.setSelected(true);
+      }
+    });
+    clearTxButt = new JButton("清空发送区");
+    clearTxButt.addActionListener(e -> {
+      txArea.setText("");
+    });
+    saveTxButt = new JButton("保存发送数据");
+    JPanel txButtPanel = new JPanel(new GridLayout(4, 1, 5, 5));
+    txButtPanel.add(txStrButt);
+    txButtPanel.add(txHexButt);
+    txButtPanel.add(clearTxButt);
+    txButtPanel.add(saveTxButt);
+    
+    JPanel botPanel = new JPanel(new GridLayout(1, 4, 5, 5));
+    transFileButt = new JButton("发送文件");
+    transFileButt.setEnabled(false);
+    transDataButt = new JButton("发送数据");
+    transDataButt.setEnabled(false);
+    transDataButt.addActionListener(e -> {
+      transData();
+    });
+    autoTransButt = new JButton("自动发送");
+    autoTransButt.setEnabled(false);
+    autoTransButt.addActionListener(e -> {
+      autoTrans();
+    });
+    cycleField = new JTextField("500");
+    cycleField.setHorizontalAlignment(JTextField.CENTER);
+    cycleField.setFont(new Font("宋体", Font.PLAIN, 12));
+    JPanel cyclePanel = new JPanel(new GridLayout(1, 2));
+    cyclePanel.add(new JLabel("周期(ms)") {
+      private static final long serialVersionUID = 1L;
+      
+      @Override
+      public void setHorizontalAlignment(int alignment) {
+        super.setHorizontalAlignment(JLabel.RIGHT);
+      }
+    });
+    cyclePanel.add(cycleField);
+    
+    botPanel.add(transFileButt);
+    botPanel.add(transDataButt);
+    botPanel.add(autoTransButt);
+    botPanel.add(cyclePanel);
+    
+    JPanel txPanel = new JPanel(new BorderLayout(5, 5));
+    txPanel.setBorder(new TitledBorder(new EtchedBorder(), "发送缓冲区", TitledBorder.LEFT, TitledBorder.TOP));
+    txPanel.add(txPane, BorderLayout.CENTER);
+    txPanel.add(txButtPanel, BorderLayout.WEST);
+    txPanel.add(botPanel, BorderLayout.SOUTH);
+    
+    JPanel jp = new JPanel(new GridLayout(2, 1, 5, 5));
+    jp.add(rxPanel);
+    jp.add(txPanel);
+    
+    portListBox = new JComboBox<>();
+    baudBox = new JComboBox<>();
+    parityBox = new JComboBox<>();
+    stopBitBox = new JComboBox<>();
+    dataBitBox = new JComboBox<>();
+    SerialParam param1 = new SerialParam("串口", portListBox);
+    SerialParam param2 = new SerialParam("波特率", baudBox);
+    SerialParam param5 = new SerialParam("数据位", dataBitBox);
+    SerialParam param3 = new SerialParam("校验位", parityBox);
+    SerialParam param4 = new SerialParam("停止位", stopBitBox);
+    JPanel paramPanel = new JPanel(new GridLayout(1, 5, 20, 5));
+    for(String s : portList) {
+      portListBox.addItem(s);
     }
+    baudBox.addItem("9600");
+    baudBox.addItem("2400");
+    baudBox.addItem("19200");
+    parityBox.addItem("0");
+    parityBox.addItem("1");
+    parityBox.addItem("2");
+    stopBitBox.addItem("1");
+    dataBitBox.addItem("8");
+    dataBitBox.addItem("5");
+    dataBitBox.addItem("6");
+    dataBitBox.addItem("7");
+    dataBitBox.addItem("9");
+    
+    paramPanel.add(param1);
+    paramPanel.add(param2);
+    paramPanel.add(param5);
+    paramPanel.add(param3);
+    paramPanel.add(param4);
+    
+    openPort = new JButton("打开串口");
+    openPort.setFont(new Font("微软雅黑", Font.PLAIN, 20));
+    openPort.addActionListener(e -> {
+      openPortListener();
+    });
+    JPanel openPortPanel = new JPanel(new BorderLayout(10, 5));
+    rxCountField = new JTextField("0");
+    txCountField = new JTextField("0");
+    SerialParam rxCount = new SerialParam("接收", rxCountField);
+    SerialParam txCount = new SerialParam("发送", txCountField);
+    JPanel countPanel = new JPanel(new GridLayout(2, 1));
+    countPanel.add(rxCount);
+    countPanel.add(txCount);
+    
+    openPortPanel.add(openPort, BorderLayout.WEST);
+    openPortPanel.add(new JLabel("注：先查看参数，然后打开串口") {
 
-    DefaultTableModel model = new DefaultTableModel(rowNum, colNum) {
       private static final long serialVersionUID = 1L;
 
       @Override
-      public boolean isCellEditable(int row, int column) {
-        return false;
+      public void setHorizontalAlignment(int alignment) {
+        super.setHorizontalAlignment(JLabel.LEFT);
       }
-    };
-    model.addRow(new Object[] { "*", "", "", "", "", "", "", "", "", "", "", "", "" });
-    JTable table = new JTable(model);
-    return table;
-  }
+      @Override
+      public void setForeground(Color fg) {
+        super.setForeground(Color.BLUE);
+      }
+    }, BorderLayout.CENTER);
+    openPortPanel.add(countPanel, BorderLayout.EAST);
+    
+    JPanel portPanel = new JPanel(new BorderLayout(5, 10));
+    portPanel.add(paramPanel, BorderLayout.NORTH);
+    portPanel.add(openPortPanel, BorderLayout.CENTER);
+    clearCountButt = new JButton("清零");
+    clearCountButt.addActionListener(e -> {
+      rxCountField.setText("0");
+      txCountField.setText("0");
+    });
+    portPanel.add(clearCountButt, BorderLayout.EAST);
+    
+    leftPane.add(jp, BorderLayout.CENTER);
+    leftPane.add(portPanel, BorderLayout.SOUTH);
+    
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    rightPane = new JPanel(new BorderLayout(5, 5));
+    rightPane.setBorder(new TitledBorder(new EtchedBorder(), "电机参数设置", TitledBorder.CENTER, 
+        TitledBorder.TOP, new Font("等线", Font.PLAIN, 13), Color.BLACK));
+    tabbedPane.addTab("串口工具", leftPane);
+    
+    tabbedPane.addTab("位置参数", rightPane);
+    
+    JPanel panel = new JPanel(new GridLayout(4, 1, 5, 5));
+    panel.setBorder(new TitledBorder("参数列表"));
+    for(int i = 0; i < 4; i++) {
+      
+      PositionData data = PositionTools.getByName(productType, i + 1);
+      if(data == null) {//除517外其他机种只有三个按键
+        data = new PositionData(4, productType, 0, 0, 0, 0, LocalDate.now().toString(), "");
+      }
+      
+      panels[i] = new JPanel(new GridLayout(2, 7, 5, 5));
+      panels[i].setBorder(new LineBorder(Color.LIGHT_GRAY));
+      panels[i].add(new JLabel((i + 1) + "号参数:", SwingConstants.RIGHT));
+      
+      args[i][0] = new JTextField("X设定位置");
+      args[i][0].setEditable(false);
+      args[i][0].setHorizontalAlignment(JTextField.CENTER);
+      panels[i].add(args[i][0]);
+      args[i][1] = new JTextField("X当前位置");
+      args[i][1].setEditable(false);
+      args[i][1].setHorizontalAlignment(JTextField.CENTER);
+      panels[i].add(args[i][1]);
+      args[i][2] = new JTextField("Z设定位置");
+      args[i][2].setEditable(false);
+      args[i][2].setHorizontalAlignment(JTextField.CENTER);
+      panels[i].add(args[i][2]);
+      args[i][3] = new JTextField("Z当前位置");
+      args[i][3].setEditable(false);
+      args[i][3].setHorizontalAlignment(JTextField.CENTER);
+      panels[i].add(args[i][3]);
+      args[i][4] = new JTextField("行程");
+      args[i][4].setEditable(false);
+      args[i][4].setHorizontalAlignment(JTextField.CENTER);
+      panels[i].add(args[i][4]);
 
+      butts[i][0] = new JButton("更新参数" + (i+1));
+      butts[i][1] = new JButton("去" + (i+1) + "号位置");
+      panels[i].add(butts[i][0]);
+      panels[i].add(butts[i][1]);
+      
+      panels[i].add(new JLabel((i + 1) + "号数值:", SwingConstants.RIGHT));
+      fields[i][0] = new JTextField(data.getXposition() + "");
+      fields[i][1] = new JTextField(data.getXtemp() + "");
+      fields[i][2] = new JTextField(data.getZposition() + "");
+      fields[i][3] = new JTextField(data.getZtemp() + "");
+      fields[i][4] = new JTextField("0");
+      
+      for(int j = 0; j < 5; j++) {
+        fields[i][j].setHorizontalAlignment(JTextField.CENTER);
+        fields[i][j].setFont(new Font("宋体", Font.PLAIN, 18));
+        
+      }
+      
+      panels[i].add(fields[i][0]);
+      panels[i].add(fields[i][1]);
+      panels[i].add(fields[i][2]);
+      panels[i].add(fields[i][3]);
+      panels[i].add(fields[i][4]);
+      
+      butts[i][2] = new JButton("回读行程" + (i+1));
+      butts[i][3] = new JButton("回原点");
+      panels[i].add(butts[i][2]);
+      panels[i].add(butts[i][3]);
+      
+      panel.add(panels[i]); 
+      
+      for(int t = 0; t < 4; t++) {
+        butts[i][t].addActionListener(e -> {
+          buttProcess(e.getActionCommand());
+        });
+      }
+    }
+    rightPane.add(panel, BorderLayout.CENTER);
+    JPanel bp = new JPanel(new GridLayout(1, 6, 10, 5));
+    modButts[0] = new JButton("X前进");
+    modButts[1] = new JButton("X后退");
+    modButts[2] = new JButton("Z前进");
+    modButts[3] = new JButton("Z后退");
+    modButts[4] = new JButton("电机停止");
+    modButts[5] = new JButton("回原点");
+    bp.setBorder(new TitledBorder("电机控制"));
+    for(int i = 0; i < 6; i++) {
+      modButts[i].addActionListener(e -> {
+        buttProcess(e.getActionCommand());
+      });
+      bp.add(modButts[i]);
+    }
+    rightPane.add(bp, BorderLayout.SOUTH);
+    
+    frame.getContentPane().add(tabbedPane, BorderLayout.CENTER);
+    
+    //自动发送定时任务
+    timer1 = new Timer(Integer.parseInt(cycleField.getText()), e -> {
+      String str = txArea.getText();
+      if(txHexButt.isSelected()) {
+        byte[] data = SerialPortTools.toByteArray(str);
+        SerialPortTools.writeBytes(COM1, SerialPortTools.toByteArray(txArea.getText()));
+        int count = Integer.parseInt(txCountField.getText()) + data.length;
+        txCountField.setText(count + "");
+      } else if(txStrButt.isSelected()) {
+          SerialPortTools.writeString(COM1, "UTF-8", str);
+          int count = Integer.parseInt(txCountField.getText()) + str.length();
+          txCountField.setText(count + "");
+      } 
+    });//*/
+    
+  }
   /**
-   * 提供设置JTable方法
-   * 
-   * @param table
-   * @return
+   * 打开串口事件
    */
-  public JTable completedTable(JTable table) {
-
-    DefaultTableCellRenderer r = new DefaultTableCellRenderer(); // 设置
-    r.setHorizontalAlignment(JLabel.CENTER); // 单元格内容居中
-    // table.setOpaque(false); //设置表透明
-    JTableHeader jTableHeader = table.getTableHeader(); // 获取表头
-    // 设置表头名称字体样式
-    jTableHeader.setFont(new Font("宋体", Font.PLAIN, 14));
-    // 设置表头名称字体颜色
-    jTableHeader.setForeground(Color.BLACK);
-    jTableHeader.setDefaultRenderer(r);
-
-    // 表头不可拖动
-    jTableHeader.setReorderingAllowed(false);
-    // 列大小不可改变
-    jTableHeader.setResizingAllowed(false);
-    // 设置列宽
-    TableColumn col_0 = table.getColumnModel().getColumn(0);
-    TableColumn col_2 = table.getColumnModel().getColumn(2);
-    TableColumn col_3 = table.getColumnModel().getColumn(3);
-    TableColumn col_4 = table.getColumnModel().getColumn(4);
-    TableColumn col_5 = table.getColumnModel().getColumn(5);
-    TableColumn col_7 = table.getColumnModel().getColumn(7);
-    TableColumn col_8 = table.getColumnModel().getColumn(8);
-    col_0.setPreferredWidth(20);
-    col_2.setPreferredWidth(150);
-    col_3.setPreferredWidth(120);
-    col_4.setPreferredWidth(120);
-    col_5.setPreferredWidth(120);
-    col_7.setPreferredWidth(120);
-    col_8.setPreferredWidth(200);
-
-    // table.setEnabled(false); // 内容不可编辑
-    table.setDefaultRenderer(Object.class, r); // 居中显示
-    table.setRowHeight(30); // 设置行高
-    // 增加一行空白行
-    table.setGridColor(new Color(245, 245, 245)); // 设置网格颜色
-    table.setForeground(Color.BLACK); // 设置文字颜色
-    table.setBackground(new Color(245, 245, 245));
-    table.setFont(new Font("宋体", Font.PLAIN, 13));
-    table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);// 关闭表格列自动调整
-
-    return table;
+  private void openPortListener() {
+    if(COM1 == null && openPort.getText().equals("打开串口")) {
+      if(portList.contains(portListBox.getSelectedItem().toString())) {
+        try {
+          COM1 = SerialPortTools.getPort(portListBox.getSelectedItem().toString(), Integer.parseInt(baudBox.getSelectedItem().toString()), 
+              Integer.parseInt(dataBitBox.getSelectedItem().toString()), Integer.parseInt(stopBitBox.getSelectedItem().toString()), 
+              Integer.parseInt(parityBox.getSelectedItem().toString()));
+          openPort.setText("关闭串口");
+          transFileButt.setEnabled(true);
+          transDataButt.setEnabled(true);
+          autoTransButt.setEnabled(true);
+          SerialPortTools.add(COM1, arg0 -> {
+            switch (arg0.getEventType()) {
+            case SerialPortEvent.BI:  //10 通讯中断
+            case SerialPortEvent.OE:  // 7 溢位（溢出）错误
+            case SerialPortEvent.FE:  // 9 帧错误
+            case SerialPortEvent.PE:  // 8 奇偶校验错误
+            case SerialPortEvent.CD:  // 6 载波检测
+            case SerialPortEvent.CTS:  // 3 清除待发送数据
+            case SerialPortEvent.DSR:  // 4 待发送数据准备好了
+            case SerialPortEvent.RI:  // 5 振铃指示
+            case SerialPortEvent.OUTPUT_BUFFER_EMPTY:  // 2 输出缓冲区已清空
+              JOptionPane.showMessageDialog(null, COM1.getName() + "::" + arg0.toString());
+              break;
+            case SerialPortEvent.DATA_AVAILABLE: 
+              //有数据到达
+              try {
+                Thread.sleep(5);
+              } catch (InterruptedException e) {
+                e.printStackTrace();
+              }
+              if(rxHexButt.isSelected()) {
+                byte[] data = SerialPortTools.readBytes(COM1);
+                rxArea.append(SerialPortTools.bytesToHex(data) + SEPARATOR);
+                int count = Integer.parseInt(rxCountField.getText()) + data.length;
+                rxCountField.setText(count + "");
+              } else if(rxStrButt.isSelected()) {
+                String str = SerialPortTools.readString(COM1, "UTF-8");
+                rxArea.append(str + SEPARATOR);
+                int count = Integer.parseInt(rxCountField.getText()) + str.length();
+                rxCountField.setText(count + "");
+              }
+              break;
+            }
+          });
+        } catch (NumberFormatException | SerialPortParamFail | NotASerialPort | NoSuchPort | PortInUse | TooManyListeners e) {
+          JOptionPane.showMessageDialog(null, e.toString());
+          openPort.setText("打开串口");
+          transFileButt.setEnabled(false);
+          transDataButt.setEnabled(false);
+          autoTransButt.setEnabled(false);
+        }
+      }
+    } else if(openPort.getText().equals("关闭串口")) {
+      COM1.close();
+      transFileButt.setEnabled(false);
+      transDataButt.setEnabled(false);
+      autoTransButt.setEnabled(false);
+      COM1 = null;
+      openPort.setText("打开串口");
+    }
   }
-
+  /**
+   * 发送数据事件
+   */
+  private void transData() {
+    if(COM1 != null) {
+      String str = txArea.getText();
+      if(str.length() > 0 && txHexButt.isSelected()) {
+        byte[] data = SerialPortTools.toByteArray(str);
+        SerialPortTools.writeBytes(COM1, data);
+        int count = Integer.parseInt(txCountField.getText()) + data.length;
+        txCountField.setText(count + "");
+      } else if(str.length() > 0 && txStrButt.isSelected()) {
+        SerialPortTools.writeString(COM1, "UTF-8", str);
+        int count = Integer.parseInt(txCountField.getText()) + str.length();
+        txCountField.setText(count + "");
+      } else
+        JOptionPane.showMessageDialog(null, COM1.getName() + "::发送数据不能为空！");
+    }
+  }
+  /**
+   * 自动发送数据事件
+   */
+  private void autoTrans() {
+    
+    if(COM1 != null && autoTransButt.getText().equals("自动发送")) {
+      if(txArea.getText().length() > 0) {
+        timer1.setInitialDelay(Integer.parseInt(cycleField.getText()));
+        timer1.start();
+        autoTransButt.setText("停止发送");
+      }
+    } else if(autoTransButt.getText().equals("停止发送")){
+      autoTransButt.setText("自动发送");
+      timer1.stop();
+    }
+  }
+  /**
+   * 电机参数按键处理事件
+   * @param command
+   */
+  private void buttProcess(String command) {
+    switch (command) {
+    
+    case "去1号位置":
+      JOptionPane.showMessageDialog(null, "1号");
+      break;
+    case "去2号位置":
+      JOptionPane.showMessageDialog(null, "2号");
+      break;
+    case "去3号位置":
+      JOptionPane.showMessageDialog(null, "3号");
+      break;
+    case "去4号位置":
+      JOptionPane.showMessageDialog(null, "4号");
+      break;
+    case "更新参数1":
+      JOptionPane.showMessageDialog(null, "更新参数1");
+      break;
+    case "更新参数2":
+      JOptionPane.showMessageDialog(null, "更新参数2");
+      break;
+    case "更新参数3":
+      JOptionPane.showMessageDialog(null, "更新参数3");
+      break;
+    case "更新参数4":
+      JOptionPane.showMessageDialog(null, "更新参数4");
+      break;
+    case "回读行程1":
+      JOptionPane.showMessageDialog(null, "回读行程1");
+      break;
+    case "回读行程2":
+      JOptionPane.showMessageDialog(null, "回读行程2");
+      break;
+    case "回读行程3":
+      JOptionPane.showMessageDialog(null, "回读行程3");
+      break;
+    case "回读行程4":
+      JOptionPane.showMessageDialog(null, "回读行程4");
+      break;
+    case "X前进":
+      JOptionPane.showMessageDialog(null, "X前进");
+      break;
+    case "X后退":
+      JOptionPane.showMessageDialog(null, "X后退");
+      break;
+    case "Z前进":
+      JOptionPane.showMessageDialog(null, "Z前进");
+      break;
+    case "Z后退":
+      JOptionPane.showMessageDialog(null, "Z后退");
+      break;
+    case "电机停止":
+      JOptionPane.showMessageDialog(null, "电机停止");
+      break;
+    case "回原点":
+      JOptionPane.showMessageDialog(null, "回原点");
+      break;
+    
+    default:
+      break;
+    }
+  }
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   /**
    * 窗口退出时调用
    */
   private void close() {
-    timer1.stop();
     frame.dispose();
   }
   /**
@@ -368,30 +649,21 @@ public class UsartTools {
   private void about() {
     JOptionPane.showMessageDialog(null, "软件版本：V1.0-2018\r\n技术支持：Loyer");
   }
-  ///////////////////////////////////////////////////////////////////////////////
-  /**
-   * 测试数据及测试时间显示面板
-   * 
-   * @author hw076
-   *
-   */
-  class MyPanel extends JPanel {
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  class SerialParam extends JPanel {
+    
     private static final long serialVersionUID = 1L;
 
-    public MyPanel(String title, JTextField field) {
-      TitledBorder tb = new TitledBorder(new EtchedBorder(), title, TitledBorder.LEFT, TitledBorder.TOP,
-          new Font("等线", Font.ITALIC, 11), Color.BLUE);
-      setBorder(tb);
+    public SerialParam(String paramName, JComboBox<String> box) {
       setLayout(new BorderLayout());
-      add(field, BorderLayout.CENTER);
+      add(new JLabel(paramName), BorderLayout.WEST);
+      add(box, BorderLayout.CENTER);
     }
-    public MyPanel(String title, JTextField field, JButton button) {
-      TitledBorder tb = new TitledBorder(new EtchedBorder(), title, TitledBorder.LEFT, TitledBorder.TOP,
-          new Font("等线", Font.ITALIC, 11), Color.BLUE);
-      setBorder(tb);
-      setLayout(new GridLayout(1, 2, 5, 5));
-      add(field);
-      add(button);
+    public SerialParam(String name, JTextField field) {
+      setLayout(new BorderLayout(5, 5));
+      add(new JLabel(name), BorderLayout.WEST);
+      field.setColumns(10);
+      add(field, BorderLayout.CENTER);
     }
   }
 }

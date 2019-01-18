@@ -1,11 +1,20 @@
 package loyer.db;
 
+import java.awt.Color;
+import java.awt.Font;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Vector;
 
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JTable;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
+import javax.swing.table.TableColumn;
 
 /**
  * 点击运行位置工具类
@@ -131,6 +140,109 @@ public class PositionTools {
       return back;
     }    
   }
+  
+  /**
+   * 创建JTable方法
+   * 
+   * @return
+   */
+  private static JTable getTestTable(String tableName) {
+    Vector<Object> rowNum = null, colNum = null;
+    // 创建列对象
+    colNum = new Vector<>();
+    colNum.add("");
+    colNum.add("按钮");
+    colNum.add("机种名");
+    colNum.add("X设定位置");
+    colNum.add("X当前位置");
+    colNum.add("Z设定位置");
+    colNum.add("Z当前位置");
+    colNum.add("日期");
+    colNum.add("说明");
+
+    // 创建行对象
+    rowNum = new Vector<>();
+    List<PositionData> tableList = getByName(tableName); 
+    for (PositionData rd : tableList) {
+      Vector<String> vt = new Vector<>();
+      vt.add("");
+      vt.add(rd.getNumber()+ "");
+      vt.add(rd.getName());
+      vt.add(rd.getXposition() + "");
+      vt.add(rd.getXtemp() + "");
+      vt.add(rd.getZposition() + "");
+      vt.add(rd.getZtemp() + "");
+      vt.add(rd.getDate());
+      vt.add(rd.getTips());
+
+      rowNum.add(vt);
+    }
+
+    DefaultTableModel model = new DefaultTableModel(rowNum, colNum) {
+      private static final long serialVersionUID = 1L;
+
+      @Override
+      public boolean isCellEditable(int row, int column) {
+        return false;
+      }
+    };
+    model.addRow(new Object[] { "*", "", "", "", "", "", "", "", "", "", "", "", "" });
+    JTable table = new JTable(model);
+    return table;
+  }
+
+  /**
+   * 提供设置JTable方法
+   * 
+   * @param table
+   * @return
+   */
+  public static JTable completedTable(String tableName) {
+
+    JTable table = getTestTable(tableName);
+    DefaultTableCellRenderer r = new DefaultTableCellRenderer(); // 设置
+    r.setHorizontalAlignment(JLabel.CENTER); // 单元格内容居中
+    // table.setOpaque(false); //设置表透明
+    JTableHeader jTableHeader = table.getTableHeader(); // 获取表头
+    // 设置表头名称字体样式
+    jTableHeader.setFont(new Font("宋体", Font.PLAIN, 14));
+    // 设置表头名称字体颜色
+    jTableHeader.setForeground(Color.BLACK);
+    jTableHeader.setDefaultRenderer(r);
+
+    // 表头不可拖动
+    jTableHeader.setReorderingAllowed(false);
+    // 列大小不可改变
+    jTableHeader.setResizingAllowed(false);
+    // 设置列宽
+    TableColumn col_0 = table.getColumnModel().getColumn(0);
+    TableColumn col_2 = table.getColumnModel().getColumn(2);
+    TableColumn col_3 = table.getColumnModel().getColumn(3);
+    TableColumn col_4 = table.getColumnModel().getColumn(4);
+    TableColumn col_5 = table.getColumnModel().getColumn(5);
+    TableColumn col_7 = table.getColumnModel().getColumn(7);
+    TableColumn col_8 = table.getColumnModel().getColumn(8);
+    col_0.setPreferredWidth(20);
+    col_2.setPreferredWidth(150);
+    col_3.setPreferredWidth(120);
+    col_4.setPreferredWidth(120);
+    col_5.setPreferredWidth(120);
+    col_7.setPreferredWidth(120);
+    col_8.setPreferredWidth(200);
+
+    // table.setEnabled(false); // 内容不可编辑
+    table.setDefaultRenderer(Object.class, r); // 居中显示
+    table.setRowHeight(30); // 设置行高
+    // 增加一行空白行
+    table.setGridColor(new Color(245, 245, 245)); // 设置网格颜色
+    table.setForeground(Color.BLACK); // 设置文字颜色
+    table.setBackground(new Color(245, 245, 245));
+    table.setFont(new Font("宋体", Font.PLAIN, 13));
+    table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);// 关闭表格列自动调整
+
+    return table;
+  }
+
   
   /////////////////////////////////////////////////////////////////////////////////////////////
   /**

@@ -1,14 +1,12 @@
 package loyer.db;
 
-import java.beans.PropertyVetoException;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import javax.swing.JOptionPane;
-
-import com.mchange.v2.c3p0.ComboPooledDataSource;
 
 public class DBHelper {
   
@@ -16,13 +14,13 @@ public class DBHelper {
   private final static String USER = "root";
   private final static String PWD = "123456";
   private final static String DRIVER = "com.mysql.cj.jdbc.Driver";
-  private static ComboPooledDataSource ds = new ComboPooledDataSource();
+  //private static ComboPooledDataSource ds = new ComboPooledDataSource();
   private static PreparedStatement ptmt = null;
   private static Connection conn = null;
   private static ResultSet rs = null;
   
   private DBHelper() {}; //不允许其他类创建本类实例
-  
+  /*
   static {
     try {
       ds.setDriverClass(DRIVER);
@@ -42,7 +40,7 @@ public class DBHelper {
    * @return
    */
   public static Connection getConnection() {
-    
+    /*
     Connection conn = null;
     try {
       conn =  ds.getConnection();
@@ -50,7 +48,7 @@ public class DBHelper {
       JOptionPane.showMessageDialog(null, "数据库连接失败：" + e.getLocalizedMessage());
     }
     return conn;//*/
-    /*
+    
     Connection connection = null;
     try {
       Class.forName(DRIVER);

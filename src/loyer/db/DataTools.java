@@ -67,7 +67,7 @@ public class DataTools {
 
     // 创建行对象
     rowNum = new Vector<>();
-    List<Data> tableList = DataTools.getAllByDB(tableName);
+    List<Data> tableList = getAllByDB(tableName);
     for (Data rd : tableList) {
       Vector<String> vt = new Vector<>();
       vt.add("");
@@ -97,11 +97,12 @@ public class DataTools {
   /**
    * 提供设置JTable方法
    * 
-   * @param table
+   * @param tableName
    * @return
    */
-  public static JTable completedTable(JTable table) {
+  public static JTable completedTable(String tableName) {
 
+    JTable table = getTestTable(tableName);
     DefaultTableCellRenderer r = new DefaultTableCellRenderer(); // 设置
     r.setHorizontalAlignment(JLabel.CENTER); // 单元格内容居中
     // table.setOpaque(false); //设置表透明

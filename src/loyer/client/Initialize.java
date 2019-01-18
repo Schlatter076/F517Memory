@@ -4,7 +4,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Toolkit;
-
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -18,9 +17,6 @@ import javax.swing.border.EmptyBorder;
 
 public class Initialize extends JFrame {
 
-  /**
-   * 
-   */
   private static final long serialVersionUID = 1L;
   private JPanel contentPane;
   private int count = 0;
@@ -34,6 +30,7 @@ public class Initialize extends JFrame {
    * Launch the application.
    */
   public static void main(String[] args) {
+    
     Initialize frame = new Initialize();
     frame.setVisible(true);
     LogIn.logIn();
